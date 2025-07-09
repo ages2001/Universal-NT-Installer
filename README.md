@@ -105,7 +105,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Drivers for booting**: Successful installation cannot be guaranteed in all cases, as driver-related issues may arise.
 - **CHS and LBA**: CHS (Cylinder-Head-Sector) addressing is required for early NT editions and mandates small partition sizes.
 - **Boot Partition**: Must exist and be a primary, supported filesystem (FAT12/FAT16/FAT32/NTFS).
-- **exFAT Filesystem**: Windows 2000 Patched and Windows XP Vanilla/Patched can read and write exFAT but cannot boot because NTLDR cannot recognize exFAT partitions. So, you cannot install it to exFAT partition. However, you can create/delete/format exFAT partitions using Partition Editor/Formatter.
+- **exFAT Filesystem**: Windows 2000 Patched and Windows XP Vanilla/Patched can read and write an exFAT partition but cannot boot from it because NTLDR cannot recognize exFAT partitions. So, you cannot install it to exFAT partition. However, you can create/delete/format exFAT partitions using Partition Editor/Formatter.
 
 ---
 
