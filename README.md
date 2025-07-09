@@ -59,7 +59,8 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE) or AHCI
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA
 - **Free Space**: At least 70 MiB
-- **Patches**: UniATA, FAT32
+
+- **Patches Applied**: UniATA, FAT32
 
 ### Windows NT 4.00 (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -71,7 +72,8 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE) or AHCI
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, NTFS
 - **Free Space**: At least 160 MiB
-- **Patches**: UniATA, FAT32, USB 1.x/2.0
+
+- **Patches Applied**: UniATA, FAT32, USB 1.x/2.0
 
 ### Windows 2000 (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -82,7 +84,8 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE), AHCI or NVMe
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
 - **Free Space**: At least 980 MiB
-- **Patches**: ACPI, USB 1.x/2.x/3.x, AHCI, NVMe
+
+- **Patches Applied**: ACPI, USB 1.x/2.x/3.x, AHCI, NVMe
 
 ### Windows XP (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -93,7 +96,8 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE), AHCI, RAID or NVMe
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
 - **Free Space**: At least 1.5 GiB for x86, 2.2 GiB for x64
-- **Patches**: ACPI, USB 3.x, AHCI, RAID, NVMe
+
+- **Patches Applied**: ACPI, USB 3.x, AHCI, RAID, NVMe
 
 ---
 
