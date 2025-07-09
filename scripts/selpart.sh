@@ -24,7 +24,7 @@ parts_scanned=0
 scan_disks() {
   dialog --infobox "Scanning disks..." 3 22
 
-  for disk in /dev/sd? /dev/nvme?n?; do
+  for disk in /dev/sd? /dev/nvme?n? /dev/mmcblk?; do
     [[ ! -b "$disk" ]] && continue
     type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
     [[ "$type" != "disk" ]] && continue
@@ -401,6 +401,16 @@ get_disk_interface_type() {
 
   # Ensure we're using only the disk name (e.g., "sda" from "/dev/sda")
   disk=$(basename "$disk")
+  
+  if [[ "$disk" == *nvme* ]]; then
+    echo "NVMe"
+    return
+  fi
+  
+  if [[ "$disk" == *mmc* ]]; then
+    echo "eMMC"
+    return
+  fi
 
   # Get the sysfs path for the device
   sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
@@ -417,11 +427,6 @@ get_disk_interface_type() {
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
   # Identify controller type
-  if [[ "$disk" == *nvme* ]]; then
-    echo "NVMe"
-    return
-  fi
-  
   if echo "$lspci_out" | grep -qi "sata"; then
     if echo "$lspci_out" | grep -qi "ahci"; then
       echo "AHCI"
@@ -540,9 +545,9 @@ controller_OS_check() {
     fi
   fi
 
-  # XP Patched: IDE, AHCI, RAID and NVMe
+  # XP Patched: IDE, AHCI, RAID, eMMC and NVMe
   if [[ "$edition_desc" =~ Windows\ XP ]] && [[ "$edition_desc" =~ Patched ]]; then
-    if [[ "$controller" != "IDE" && "$controller" != "SATA (IDE)" && "$controller" != "AHCI" && "$controller" != "RAID" && "$controller" != "NVMe" ]]; then
+    if [[ "$controller" != "IDE" && "$controller" != "SATA (IDE)" && "$controller" != "AHCI" && "$controller" != "RAID" && "$controller" != "eMMC" && "$controller" != "NVMe" ]]; then
       dialog --msgbox "Only IDE, AHCI, RAID and NVMe disks are supported for $edition_desc!" 7 60
       return 1
     fi
@@ -672,7 +677,7 @@ parse_boot_part_num() {
     local partname parttype fstype
 
     # Construct the full partition path
-    if [[ "$disk" =~ nvme[0-9]+n[0-9]+$ ]]; then
+    if [[ "$disk" =~ nvme[0-9]+n[0-9]+$ || "$disk" =~ mmcblk[0-9]+$ ]]; then
       partname="${disk}p${active_partnum}"
     else
       partname="${disk}${active_partnum}"
@@ -738,7 +743,7 @@ is_partition_hidden() {
 
   # Build partition device name (nvme disks have 'p' before partition number)
   local part_dev=""
-  if [[ "$disk" =~ nvme[0-9]+n[0-9]+$ ]]; then
+  if [[ "$disk" =~ nvme[0-9]+n[0-9]+$ || "$disk" =~ mmcblk[0-9]+$ ]]; then
     part_dev="${disk}p${part_num}"
   else
     part_dev="${disk}${part_num}"

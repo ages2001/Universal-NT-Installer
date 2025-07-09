@@ -32,7 +32,7 @@ DISK_BASENAME=$(basename "$DISK_DEVICE")
 make_partition_path() {
   local disk="$1"
   local partnum="$2"
-  if [[ "$disk" =~ ^/dev/nvme[0-9]+n[0-9]+$ ]]; then
+  if [[ "$disk" =~ ^/dev/nvme[0-9]+n[0-9]+$ || "$disk" =~ mmcblk[0-9]+$ ]]; then
     echo "${disk}p${partnum}"
   else
     echo "${disk}${partnum}"
@@ -92,6 +92,8 @@ get_disk_number() {
     local letter=${BASH_REMATCH[1]}
     echo $(( $(printf '%d' "'$letter") - 97 ))
   elif [[ "$DISK_BASENAME" =~ ^nvme([0-9]+)n[0-9]+$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  elif [[ "$DISK_BASENAME" =~ ^mmcblk([0-9]+)$ ]]; then
     echo "${BASH_REMATCH[1]}"
   else
     echo 0

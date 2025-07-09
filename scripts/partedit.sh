@@ -8,13 +8,23 @@ get_disk_interface_type() {
 
   # Ensure we're using only the disk name (e.g., "sda" from "/dev/sda")
   disk=$(basename "$disk")
+  
+  if [[ "$disk" == *nvme* ]]; then
+    echo "NVMe"
+    return
+  fi
+  
+  if [[ "$disk" == *mmc* ]]; then
+    echo "eMMC"
+    return
+  fi
 
   # Get the sysfs path for the device
   sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
   [[ -z "$sys_path" ]] && { echo "Unknown"; return; }
 
   # Extract the PCI address (e.g., 0000:00:1f.2 or 00:1f.2)
-  pci_addr=$(echo "$sys_path" | grep -oE '([[:alnum:]]{4}:)?[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]' | head -n1)
+  pci_addr=$(echo "$sys_path" | grep -oE '([[:alnum:]]{4}:)?[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]' | tail -n1)
   [[ -z "$pci_addr" ]] && { echo "Unknown"; return; }
 
   # Remove domain part if present (0000:) for use in lspci
@@ -24,13 +34,9 @@ get_disk_interface_type() {
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
   # Identify controller type
-  if [[ "$disk" == *nvme* ]]; then
-    echo "NVMe"
-    return
-  fi
-  
-  if echo "$lspci_out" | grep -q "sata controller"; then
-    if echo "$lspci_out" | grep -q "ahci"; then
+ 
+  if echo "$lspci_out" | grep -qi "sata"; then
+    if echo "$lspci_out" | grep -qi "ahci"; then
       echo "AHCI"
     else
       echo "SATA (IDE)"
@@ -38,22 +44,22 @@ get_disk_interface_type() {
     return
   fi
 
-  if echo "$lspci_out" | grep -q "ide interface"; then
+  if echo "$lspci_out" | grep -qi "ide"; then
     echo "IDE"
     return
   fi
 
-  if echo "$lspci_out" | grep -q "raid bus controller"; then
+  if echo "$lspci_out" | grep -qi "raid"; then
     echo "RAID"
     return
   fi
 
-  if echo "$lspci_out" | grep -q "sas"; then
+  if echo "$lspci_out" | grep -qi "sas"; then
     echo "SAS"
     return
   fi
 
-  if echo "$lspci_out" | grep -q "scsi"; then
+  if echo "$lspci_out" | grep -qi "scsi"; then
     echo "SCSI"
     return
   fi
@@ -67,14 +73,14 @@ while true; do
   # Step 1: List suitable disks
   declare -a DISK_MENU=()
 
-  for disk_path in /dev/sd? /dev/nvme?n?; do
+  for disk_path in /dev/sd? /dev/nvme?n? /dev/mmcblk?; do
     [[ ! -b "$disk_path" ]] && continue
     disk=$(basename "$disk_path")
     type=$(lsblk -dn -o TYPE "$disk_path" 2>/dev/null)
     [[ "$type" != "disk" ]] && continue
     
     # Removable disks skipped
-    rm_flag=$(lsblk -dn -o RM "$disk_path" 2>/dev/null)
+    rm_flag=$(lsblk -dn -o RM "$disk" 2>/dev/null)
     [[ "${rm_flag//[[:space:]]/}" == "1" ]] && continue
 
     size_bytes=$(lsblk -dn -o SIZE -b "$disk_path" 2>/dev/null)

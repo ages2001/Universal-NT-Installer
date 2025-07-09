@@ -38,6 +38,17 @@ get_disk_interface_type() {
 
   # Ensure we're using only the disk name (e.g., "sda" from "/dev/sda")
   disk=$(basename "$disk")
+  
+  if [[ "$disk" == *nvme* ]]; then
+    echo "NVMe"
+    return
+  fi
+  
+  if [[ "$disk" == *mmc* ]]; then
+    echo "eMMC"
+    return
+  fi
+
 
   # Get the sysfs path for the device
   sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
@@ -54,11 +65,6 @@ get_disk_interface_type() {
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
   # Identify controller type
-  if [[ "$disk" == *nvme* ]]; then
-    echo "NVMe"
-    return
-  fi
-  
   if echo "$lspci_out" | grep -qi "sata"; then
     if echo "$lspci_out" | grep -qi "ahci"; then
       echo "AHCI"
@@ -97,7 +103,7 @@ select_disk() {
     if [[ "$DISK_MENU_READY" != "1" ]]; then
       dialog --infobox "Scanning disks..." 3 22
   
-      for disk in /dev/sd? /dev/nvme?n?; do
+      for disk in /dev/sd? /dev/nvme?n? /dev/mmcblk?; do
         [[ ! -b "$disk" ]] && continue
         type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
         [[ "$type" != "disk" ]] && continue
