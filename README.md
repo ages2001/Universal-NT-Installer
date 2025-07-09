@@ -12,7 +12,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Compatible with modern and legacy hardware:** Supports IDE, AHCI, NVMe, and RAID controllers. Also contains USB 1.x/2.x/3.x and ACPI patches.
 - **Simple bash-based installation scripts:** Designed for easy automation and customization.
 - **Modular design:** Uses configuration files for editions, OS lists, and bootloader settings.
-- **Open Source:** Licensed under GNU GPLv3 for maximum freedom and collaboration.
+- **Open Source:** Licensed under GNU GPLv3 for maximum freedom.
 - **Cross-platform ISO build:** Supports building bootable ISO images using syslinux (vmlinuz + core.gz) that work on both Linux and Windows systems.
 - **Bootable ISO creation:** The folder contents can be directly converted into a bootable ISO file ready for USB or CD/DVD deployment.
 
@@ -20,8 +20,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 
 ## Important Notes
 - All operating systems used, including Windows®, are trademarks of Microsoft Corporation. This product is not endorsed or affiliated with Microsoft Corporation.
-- This project is in *BETA* stage. Not responsible for any data loss, damage, or malfunction. Use at your own risk.
-- First try Vanilla editions. If does not work, then try Patched ones.
+- This project is in **BETA** stage. Not responsible for any data loss, damage, or malfunction. Use at your own risk.
 - Installer only supports Legacy Boot/CSM mode. If you want to use the installer in a computer which does not support Legacy Boot/CSM mode, please look at the cool [CSMWrap](https://github.com/FlyGoat/csmwrap) project made by [FlyGoat](https://github.com/FlyGoat). It enables CSM support even on UEFI Class 3 systems. But it's still beta and may not work.
 - Readme file will contain more information in the future.
 - Please don't hesitate to report any issues you find. I will try to fix them as best as I can, whenever I get free time.
@@ -35,11 +34,11 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - Disk: MBR scheme and IDE/AHCI/RAID/NVMe controller supported by Tiny Core Linux
 - Installation media: USB or CD/DVD at least 2.5 GiB
 
-*NOTE:* For Windows XP x64, x86-64 Intel or AMD CPU is required!
+**NOTE:** For Windows XP x64, x86-64 Intel or AMD CPU is required!
 
 ---
 
-## OS Requirements
+## OS Requirements and Patches
 
 ### Windows NT 3.1 (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -60,6 +59,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE) or AHCI
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA
 - **Free Space**: At least 70 MiB
+- **Patches**: UniATA, FAT32
 
 ### Windows NT 4.00 (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -71,6 +71,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE) or AHCI
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, NTFS
 - **Free Space**: At least 160 MiB
+- **Patches**: UniATA, FAT32, USB 1.x/2.0
 
 ### Windows 2000 (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -81,6 +82,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE), AHCI or NVMe
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
 - **Free Space**: At least 980 MiB
+- **Patches**: ACPI, USB 1.x/2.x/3.x, AHCI, NVMe
 
 ### Windows XP (Vanilla)
 - **Controller**: IDE or SATA (IDE) only
@@ -91,12 +93,13 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Controller**: IDE, SATA (IDE), AHCI, RAID or NVMe
 - **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
 - **Free Space**: At least 1.5 GiB for x86, 2.2 GiB for x64
+- **Patches**: ACPI, USB 3.x, AHCI, RAID, NVMe
 
 ---
 
 ### Notes
 - **Drivers for booting**: Successful installation cannot be guaranteed in all cases, as driver-related issues may arise.
-- **CHS vs LBA**: CHS (Cylinder-Head-Sector) addressing is required for early NT editions and mandates small partition sizes.
+- **CHS and LBA**: CHS (Cylinder-Head-Sector) addressing is required for early NT editions and mandates small partition sizes.
 - **Boot Partition**: Must exist and be a primary, supported filesystem (FAT12/FAT16/FAT32/NTFS).
 - **exFAT Filesystem**: Windows 2000 Patched and Windows XP Vanilla/Patched can read and write exFAT but cannot boot because NTLDR cannot recognize exFAT partitions. So, you cannot install it to exFAT partition. However, you can create/delete/format exFAT partitions using Partition Editor/Formatter.
 
@@ -106,8 +109,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 
 ### Prerequisites
 
-- A Linux or Windows environment capable of running ISO building tools supporting syslinux (e.g., `mkisofs`, `xorriso`, `mkisofs.exe`).
-- Basic knowledge of bash and terminal usage.
+- A Linux or Windows environment capable of running ISO building tools supporting syslinux (e.g. `genisoimage`, `mkisofs`, `xorriso`, `mkisofs.exe`).
 - Access to the required OS `.tar.gz` archives (see below).
 
 ### Important Note on `.tar.gz` Archives
@@ -145,8 +147,8 @@ If you want to build or customize the bootable ISO yourself from the repository 
 
 You need to have ISO creation tools that support the syslinux bootloader such as:
 
-- `mkisofs` (preferred)
-- `xorriso`
+- `genisoimage` and `mkisofs` (preferred)
+- `xorriso` (alternative)
 - `syslinux` (for bootloader binaries like `isolinux.bin`, `vmlinuz`, `core.gz`)
 
 #### Step-by-step Instructions
@@ -202,9 +204,9 @@ You may follow the similar steps as above in Linux/WSL to build the ISO.
 ## Preparing Bootable Media
 
 - Use the ISO file from the Releases section.
-- Minimum USB size: 2.5 GB.
-- For USB, tools like **Rufus** (Windows) or `dd` (Linux) can be used.
-- For CD/DVDs, use any standard burning software.
+- Minimum USB or CD/DVD size: 2.5 GB.
+- For USB, tools like **Rufus** (Windows) or `dd` (Linux) can be used. USB partition must be formatted with FAT16 or FAT32.
+- For CD/DVDs, use any standard burning software like UltraISO etc.
 - Boot the target machine from the USB or CD/DVD to start installation.
 
 ---
