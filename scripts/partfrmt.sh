@@ -13,17 +13,22 @@ declare -A part_start_lba_map=()
 declare -a parts_sorted=()
 
 # === Format helper ===
+# Format size function: input in KB, output in KB/MB/GB/TB with decimals
 format_size() {
   local size_kb=$1
-  if (( size_kb < 1024 )); then
-    awk -v kb="$size_kb" 'BEGIN { printf "%.2f KB", kb }'
-  elif (( size_kb < 1024*1024 )); then
-    awk -v kb="$size_kb" 'BEGIN { printf "%.2f MB", kb/1024 }'
-  elif (( size_kb < 1024*1024*1024 )); then
-    awk -v kb="$size_kb" 'BEGIN { printf "%.2f GB", kb/1024/1024 }'
+  local result
+
+  if awk "BEGIN {exit !($size_kb < 1024)}"; then
+    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb; fmt=sprintf("%.2f KB", val); print fmt }')
+  elif awk "BEGIN {exit !($size_kb < 1024*1024)}"; then
+    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024; fmt=sprintf("%.2f MB", val); print fmt }')
+  elif awk "BEGIN {exit !($size_kb < 1024*1024*1024)}"; then
+    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024/1024; fmt=sprintf("%.2f GB", val); print fmt }')
   else
-    awk -v kb="$size_kb" 'BEGIN { printf "%.2f TB", kb/1024/1024/1024 }'
+    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024/1024/1024; fmt=sprintf("%.2f TB", val); print fmt }')
   fi
+
+  echo "$result"
 }
 
 # === Get disk controller type ===
@@ -319,8 +324,18 @@ select_partition() {
 
         if sudo mount -o ro "$full_path" "$tmp_mount" 2>/dev/null; then
           df_out=$(df -kP "$tmp_mount" | awk 'NR==2 {print $2, $4}')
-          total_kb=$(echo "$df_out" | cut -d' ' -f1)
           free_kb=$(echo "$df_out" | cut -d' ' -f2)
+		  
+		  # Total size in KB using lsblk
+		  part_name=$(basename "$full_path")
+		  part_bytes=$(lsblk -b -n -o KNAME,SIZE 2>/dev/null | awk -v part="$part_name" '$1 ~ part { print $2; exit }')
+
+		  if [[ -n "$part_bytes" ]]; then
+		    total_kb=$(awk -v b="$part_bytes" 'BEGIN { printf "%.2f", b / 1024 }')
+		  else
+		    total_kb=0
+		  fi
+		  
           sudo umount "$tmp_mount"
           rm -rf "$tmp_mount"
 

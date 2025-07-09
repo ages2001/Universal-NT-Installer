@@ -220,8 +220,19 @@ scan_partitions() {
     if sudo mount -o ro "$full_path" "$TMP_MOUNT" 2>/dev/null; then
       # Get total and free space in KB from df
       df_out=$(df -kP "$TMP_MOUNT" | awk 'NR==2 {print $2, $4}')
-      total_kb=$(echo "$df_out" | cut -d' ' -f1)
       free_kb=$(echo "$df_out" | cut -d' ' -f2)
+	  
+      # Total size in KB using lsblk
+      part_name=$(basename "$full_path")
+      part_bytes=$(lsblk -b -n -o KNAME,SIZE 2>/dev/null | awk -v part="$part_name" '$1 ~ part { print $2; exit }')
+
+      if [[ -n "$part_bytes" ]]; then
+        total_kb=$(awk -v b="$part_bytes" 'BEGIN { printf "%.2f", b / 1024 }')
+      else
+        total_kb=0
+      fi
+
+      [[ -z "$total_kb" ]] && total_kb=0
 
       PART_SIZE_KB_MAP["$index"]="$total_kb"
       PART_FREE_KB_MAP["$index"]="$free_kb"
