@@ -54,14 +54,14 @@ while true; do
 
         OS_CHOICE="${INDEX_TO_OSCODE[$OS_SELECTED_INDEX]}"
         
-	# === CPU Compatibility Check for x64 OS codes ===
-        if [[ "$OS_CHOICE" == *"64"* ]]; then
-	  CPU_MODE=$(lscpu | grep -i 'CPU op-mode' | awk -F: '{print $2}' | xargs)
-	  if [[ "$CPU_MODE" != *"64-bit"* ]]; then
-	    dialog --msgbox "The selected OS (${INDEX_TO_OSDESC[$OS_SELECTED_INDEX]}) requires a 64-bit capable CPU.\nYour system does not support 64-bit." 8 60
-	    continue
-	  fi
-	fi
+		# === CPU Compatibility Check for x64 OS codes ===
+  	    if [[ "$OS_CHOICE" == *"64"* ]]; then
+		  CPU_MODE=$(lscpu | grep -i 'CPU op-mode' | awk -F: '{print $2}' | xargs)
+	      if [[ "$CPU_MODE" != *"64-bit"* ]]; then
+	        dialog --msgbox "The selected OS (${INDEX_TO_OSDESC[$OS_SELECTED_INDEX]}) requires a 64-bit capable CPU.\nYour system does not support 64-bit." 8 60
+	        continue
+	      fi
+	    fi
 
         while true; do
           # === Edition Selection ===
