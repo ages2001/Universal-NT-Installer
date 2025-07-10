@@ -6,7 +6,7 @@ command -v dialog >/dev/null 2>&1 || {
   exit 1
 }
 
-MOUNT_DEVICE="$1"
+INSTLR_DEVICE="$1"
 OSFILES_DIR="/mnt/isofiles/osfiles"
 OS_CFG="./os_list.cfg"
 EDITION_CFG="./edition_list.cfg"
@@ -95,7 +95,7 @@ while true; do
           fi
 
           # === Partition Selection ===
-          bash "$SCRIPTS_DIR/selpart.sh" "$EDITION_SELECTED_ZIP" "$OS_CHOICE"
+          bash "$SCRIPTS_DIR/selpart.sh" "$INSTLR_DEVICE" "$EDITION_SELECTED_ZIP" "$OS_CHOICE"
           SELPART_EXIT=$?
 
           if [[ $SELPART_EXIT -eq 2 ]]; then
@@ -126,10 +126,10 @@ while true; do
 
         case "$PM_ACTION" in
           1)
-            bash "$SCRIPTS_DIR/partedit.sh"
+            bash "$SCRIPTS_DIR/partedit.sh" "$INSTLR_DEVICE"
             ;;
           2)
-            bash "$SCRIPTS_DIR/partfrmt.sh"
+            bash "$SCRIPTS_DIR/partfrmt.sh" "$INSTLR_DEVICE"
             ;;
         esac
       done
