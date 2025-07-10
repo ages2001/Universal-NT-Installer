@@ -1,10 +1,11 @@
 #!/bin/bash
 
-ZIP_FILE="$1"
-OSCODE="$2"
+INSTLR_DEVICE="$1"
+ARCHIVE_FILE="$2"
+OSCODE="$3"
 
-if [[ -z "$ZIP_FILE" ]]; then
-  dialog --msgbox "ZIP file not provided!" 7 40
+if [[ -z "$INSTLR_DEVICE" || -z "$ARCHIVE_FILE" || -z "$OSCODE" ]]; then
+  dialog --msgbox "Missing required argument(s)!" 7 50
   exit 1
 fi
 
@@ -29,9 +30,8 @@ scan_disks() {
     type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
     [[ "$type" != "disk" ]] && continue
     
-    # Removable disks skipped
-    rm_flag=$(lsblk -dn -o RM "$disk" 2>/dev/null)
-    [[ "${rm_flag//[[:space:]]/}" == "1" ]] && continue
+    # Installer device skipped
+    [[ "$disk" == "$INSTLDR_DEVICE" ]] && continue
 
     part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
     [[ -z "$part_table" ]] && part_table="Unknown"
@@ -408,7 +408,12 @@ get_disk_interface_type() {
   fi
   
   if [[ "$disk" == *mmc* ]]; then
-    echo "eMMC"
+    removable=$(cat /sys/block/$disk/removable 2>/dev/null || echo "1")
+    if [[ "$removable" == "1" ]]; then
+      echo "MMC"
+    else
+      echo "eMMC"
+    fi
     return
   fi
 
@@ -445,7 +450,30 @@ get_disk_interface_type() {
     echo "RAID"
     return
   fi
-
+  
+  if echo "$lspci_out" | grep -qi "bolt"; then
+    echo "Thunderbolt"
+	return
+  fi
+  
+  if echo "$lspci_out" | grep -qi "usb"; then
+    if echo "$lspci_out" | grep -qiE "xhci|extensible "; then
+      echo "USB 3.x"
+    elif echo "$lspci_out" | grep -qiE "ehci|enhanced|[[:space:]]2\.0[[:space:]]"; then
+      echo "USB 2.0"
+    elif echo "$lspci_out" | grep -qiE "uhci|ohci|universal|open|[[:space:]]1\.1[[:space:]]|[[:space:]]1\.0[[:space:]]"; then
+      echo "USB 1.x"
+    else
+      echo "USB"
+    fi
+    return
+  fi
+  
+  if echo "$lspci_out" | grep -qiE 'firewire|ieee'; then
+    echo "IEEE 1394"
+    return
+  fi
+  
   if echo "$lspci_out" | grep -qi "sas"; then
     echo "SAS"
     return
@@ -453,6 +481,11 @@ get_disk_interface_type() {
 
   if echo "$lspci_out" | grep -qi "scsi"; then
     echo "SCSI"
+    return
+  fi
+  
+  if echo "$lspci_out" | grep -qiE 'pcmcia|cardbus'; then
+    echo "PCMCIA"
     return
   fi
 
@@ -545,10 +578,10 @@ controller_OS_check() {
     fi
   fi
 
-  # XP Patched: IDE, AHCI, RAID, eMMC and NVMe
+  # XP (x86/x64) Patched: IDE, AHCI, RAID, eMMC and NVMe
   if [[ "$edition_desc" =~ Windows\ XP ]] && [[ "$edition_desc" =~ Patched ]]; then
     if [[ "$controller" != "IDE" && "$controller" != "SATA (IDE)" && "$controller" != "AHCI" && "$controller" != "RAID" && "$controller" != "eMMC" && "$controller" != "NVMe" ]]; then
-      dialog --msgbox "Only IDE, AHCI, RAID and NVMe disks are supported for $edition_desc!" 7 60
+      dialog --msgbox "Only IDE, AHCI, RAID, eMMC and NVMe disks are supported for $edition_desc!" 7 60
       return 1
     fi
   fi
@@ -768,7 +801,7 @@ read_os_edition_names() {
       IFS=',' read -ra ed_arr <<< "$editions"
       for ed in "${ed_arr[@]}"; do
         IFS=':' read -r ed_code ed_zip ed_desc <<< "$ed"
-        if [[ "${ed_zip}.tar.gz" == "$ZIP_FILE" ]]; then
+        if [[ "${ed_zip}.tar.gz" == "$ARCHIVE_FILE" ]]; then
           EDITION_DESC="$ed_desc"
           break 2
         fi
@@ -916,12 +949,12 @@ while true; do
     dialog --yesno "$CONFIRM_MSG" 14 80 || continue
     
     if [[ "$OSCODE" == "XP86P" && "$EDITION_DESC" =~ Patched ]]; then
-      ZIP_FILE="XP86P.tar.gz"
+      ARCHIVE_FILE="XP86P.tar.gz"
     elif [[ "$OSCODE" == "XP64P" && "$EDITION_DESC" =~ Patched ]]; then
-      ZIP_FILE="XP64P.tar.gz"
+      ARCHIVE_FILE="XP64P.tar.gz"
     fi
 
-    bash ./scripts/startins.sh "$OS_PART_NAME" "$ZIP_FILE" "$OS_PART_NUM" "$BOOT_PART_NUM" "$OSCODE" "$EDITION_DESC"
+    bash ./scripts/startins.sh "$OS_PART_NAME" "$ARCHIVE_FILE" "$OS_PART_NUM" "$BOOT_PART_NUM" "$OSCODE" "$EDITION_DESC"
     
     STARTINST_EXIT=$?
     

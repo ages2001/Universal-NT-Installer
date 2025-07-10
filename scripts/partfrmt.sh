@@ -1,5 +1,12 @@
 #!/bin/bash
 
+INSTLR_DEVICE="$1"
+
+if [[ -z "$INSTLR_DEVICE" ]]; then
+  dialog --msgbox "Missing required argument(s)!" 7 50
+  exit 1
+fi
+
 DISK_MENU_READY=0
 PART_MENU_READY=0
 
@@ -45,10 +52,14 @@ get_disk_interface_type() {
   fi
   
   if [[ "$disk" == *mmc* ]]; then
-    echo "eMMC"
+    removable=$(cat /sys/block/$disk/removable 2>/dev/null || echo "1")
+    if [[ "$removable" == "1" ]]; then
+      echo "MMC"
+    else
+      echo "eMMC"
+    fi
     return
   fi
-
 
   # Get the sysfs path for the device
   sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
@@ -83,7 +94,30 @@ get_disk_interface_type() {
     echo "RAID"
     return
   fi
-
+  
+  if echo "$lspci_out" | grep -qi "bolt"; then
+    echo "Thunderbolt"
+	return
+  fi
+  
+  if echo "$lspci_out" | grep -qi "usb"; then
+    if echo "$lspci_out" | grep -qiE "xhci|extensible "; then
+      echo "USB 3.x"
+    elif echo "$lspci_out" | grep -qiE "ehci|enhanced|[[:space:]]2\.0[[:space:]]"; then
+      echo "USB 2.0"
+    elif echo "$lspci_out" | grep -qiE "uhci|ohci|universal|open|[[:space:]]1\.1[[:space:]]|[[:space:]]1\.0[[:space:]]"; then
+      echo "USB 1.x"
+    else
+      echo "USB"
+    fi
+    return
+  fi
+  
+  if echo "$lspci_out" | grep -qiE 'firewire|ieee'; then
+    echo "IEEE 1394"
+    return
+  fi
+  
   if echo "$lspci_out" | grep -qi "sas"; then
     echo "SAS"
     return
@@ -91,6 +125,11 @@ get_disk_interface_type() {
 
   if echo "$lspci_out" | grep -qi "scsi"; then
     echo "SCSI"
+    return
+  fi
+  
+  if echo "$lspci_out" | grep -qiE 'pcmcia|cardbus'; then
+    echo "PCMCIA"
     return
   fi
 
@@ -108,9 +147,8 @@ select_disk() {
         type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
         [[ "$type" != "disk" ]] && continue
         
-        # Removable disks skipped
-        rm_flag=$(lsblk -dn -o RM "$disk" 2>/dev/null)
-        [[ "${rm_flag//[[:space:]]/}" == "1" ]] && continue
+        # Installer device skipped
+        [[ "$disk" == "$INSTLDR_DEVICE" ]] && continue
 
         part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
         [[ -z "$part_table" ]] && part_table="Unknown"
