@@ -31,7 +31,7 @@ scan_disks() {
     [[ "$type" != "disk" ]] && continue
     
     # Installer device skipped
-    [[ "$disk" == "$INSTLDR_DEVICE" ]] && continue
+    [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
 
     part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
     [[ -z "$part_table" ]] && part_table="Unknown"
@@ -408,15 +408,14 @@ get_disk_interface_type() {
   fi
   
   if [[ "$disk" == *mmc* ]]; then
-    removable=$(cat /sys/block/$disk/removable 2>/dev/null || echo "1")
-    if [[ "$removable" == "1" ]]; then
-      echo "MMC"
-    else
+    if [[ -e "/sys/block/${disk}boot0" || -e "/sys/block/${disk}boot1" ]]; then
       echo "eMMC"
+    else
+      echo "SD/MMC"
     fi
     return
   fi
-
+  
   # Get the sysfs path for the device
   sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
   [[ -z "$sys_path" ]] && { echo "Unknown"; return; }
@@ -430,6 +429,7 @@ get_disk_interface_type() {
 
   # Get lspci output and convert to lowercase
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  [[ -z "$lspci_out" ]] && { echo "Unknown"; return; }
 
   # Identify controller type
   if echo "$lspci_out" | grep -qi "sata"; then
@@ -965,5 +965,3 @@ while true; do
     exit 0
   done
 done
-
-
