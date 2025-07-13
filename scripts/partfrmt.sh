@@ -165,7 +165,7 @@ select_disk() {
         [[ "$type" != "disk" ]] && continue
         
         # Installer device skipped
-        [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
+        [[ $INSTLR_DEVICE == $disk* ]] && continue
 
         part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
         [[ -z "$part_table" ]] && part_table="Unknown"
