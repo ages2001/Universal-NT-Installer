@@ -120,7 +120,7 @@ while true; do
     [[ "$type" != "disk" ]] && continue
     
     # Installer device skipped
-    [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
+    [[ $INSTLR_DEVICE == $disk_path* ]] && continue
 
     size_bytes=$(lsblk -dn -o SIZE -b "$disk_path" 2>/dev/null)
     size_kb=$((size_bytes / 1024))

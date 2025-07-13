@@ -29,9 +29,19 @@ scan_disks() {
     [[ ! -b "$disk" ]] && continue
     type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
     [[ "$type" != "disk" ]] && continue
+	
+	CNTRLR=$(get_disk_interface_type "$disk")
+	
+	case "$CNTRLR" in
+      "IDE"|"SATA (IDE)"|"AHCI"|"RAID"|"eMMC"|"NVMe"|"SCSI")
+        ;;  # accepted types -> do nothing
+      *)
+        continue  # skip unsupported types
+        ;;
+    esac
     
     # Installer device skipped
-    [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
+    [[ $INSTLR_DEVICE == $disk* ]] && continue
 
     part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
     [[ -z "$part_table" ]] && part_table="Unknown"
@@ -44,8 +54,6 @@ scan_disks() {
     size_bytes=$((sector_count * sector_size))
     size_kb=$((size_bytes / 1024))
     size_fmt=$(format_size "$size_kb")
-    
-    CNTRLR=$(get_disk_interface_type "$disk")
 
     DISK_MENU+=("$disk" "Size: $size_fmt | Type: $part_table | Cntrlr: $CNTRLR")
     DISK_INFO["$disk,type"]="$part_table"
