@@ -52,11 +52,10 @@ get_disk_interface_type() {
   fi
   
   if [[ "$disk" == *mmc* ]]; then
-    removable=$(cat /sys/block/$disk/removable 2>/dev/null || echo "1")
-    if [[ "$removable" == "1" ]]; then
-      echo "MMC"
-    else
+    if [[ -e "/sys/block/${disk}boot0" || -e "/sys/block/${disk}boot1" ]]; then
       echo "eMMC"
+    else
+      echo "SD/MMC"
     fi
     return
   fi
@@ -74,6 +73,7 @@ get_disk_interface_type() {
 
   # Get lspci output and convert to lowercase
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  [[ -z "$lspci_out" ]] && { echo "Unknown"; return; }
 
   # Identify controller type
   if echo "$lspci_out" | grep -qi "sata"; then
@@ -136,6 +136,23 @@ get_disk_interface_type() {
   echo "Unknown"
 }
 
+confirm_format_dialog() {
+  local partition="$1"
+  local fs="$2"
+  local access="$3"
+  local label="$4"
+
+  msg="You are about to format the following partition:\n\n"
+  msg+="Partition: $partition\n"
+  msg+="Filesystem: $fs\n"
+  [[ -n "$access" ]] && msg+="Access type: $access\n"
+  msg+="Label: ${label:--}\n"
+  msg+="\nWARNING: ALL DATA WILL BE LOST.\n\nProceed?"
+
+  dialog --yesno "$msg" 14 60
+  [[ $? -eq 0 ]]
+}
+
 # === Step 1: Disk selection ===
 select_disk() {
   while true; do
@@ -148,7 +165,7 @@ select_disk() {
         [[ "$type" != "disk" ]] && continue
         
         # Installer device skipped
-        [[ "$disk" == "$INSTLDR_DEVICE" ]] && continue
+        [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
 
         part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
         [[ -z "$part_table" ]] && part_table="Unknown"
@@ -453,13 +470,7 @@ select_partition() {
   return 0
 }
 
-# === Step 3: Confirm formatting ===
-confirm_format() {
-  dialog --yesno "WARNING: All data will be permanently erased on:\n\n$PARTITION_SELECTED\n\nProceed with formatting?" 10 60
-  [[ $? -eq 0 ]]
-}
-
-# === Step 4: Format partition ===
+# === Step 3: Format partition ===
 detect_and_format() {
   partname=$(basename "$PARTITION_SELECTED")
   part_line=$(fdisk -l "$DISK_SELECTED" 2>/dev/null | grep -E "^/dev/$partname[[:space:]]") || {
@@ -482,6 +493,7 @@ detect_and_format() {
   LABEL=""
   FS_TYPE=""
   ACCESS_MODE=""
+  label_flag=""
 
   # === Step 1: Choose valid filesystems based on partition size ===
   FS_OPTIONS=()
@@ -532,31 +544,35 @@ detect_and_format() {
   # === Step 4: Construct format command ===
   case "$FS_TYPE" in
     FAT12)
-      format_cmd="mkfs.fat -F 12" ; set_id="1" ;;
+      format_cmd="mkfs.fat -F 12" ; set_id="1" ; label_flag="-n" ;;
     FAT16)
-      format_cmd="mkfs.fat -F 16"
+      format_cmd="mkfs.fat -F 16" ; label_flag="-n"
       [[ "$ACCESS_MODE" == "CHS" ]] && set_id="6"
       [[ "$ACCESS_MODE" == "LBA" ]] && set_id="e"
       ;;
     FAT32)
-      format_cmd="mkfs.fat -F 32"
+      format_cmd="mkfs.fat -F 32" ; label_flag="-n"
       [[ "$ACCESS_MODE" == "CHS" ]] && set_id="b"
       [[ "$ACCESS_MODE" == "LBA" ]] && set_id="c"
       ;;
     NTFS)
-      format_cmd="mkfs.ntfs -f" ; set_id="7" ;;
+      format_cmd="mkfs.ntfs -f" ; set_id="7" ; label_flag="-L" ;;
     exFAT)
-      format_cmd="mkfs.exfat" ; set_id="7" ;;
+      format_cmd="mkfs.exfat" ; set_id="7" ; label_flag="-L" ;;
     *)
       dialog --msgbox "Unsupported filesystem selected." 6 40
       return 1 ;;
   esac
 
-  # === Step 5: Execute format ===
-  # Determine the correct label flag
-  label_flag="-n"  # default for FAT
-  [[ "$FS_TYPE" == "NTFS" || "$FS_TYPE" == "exFAT" ]] && label_flag="-L"
+  
+  # === Step 5: Ask for final confirmation ===
+  if ! confirm_format_dialog "$PARTITION_SELECTED" "$FS_TYPE" "$ACCESS_MODE" "$LABEL"; then
+    return 1
+  fi
 
+  dialog --infobox "Formatting..." 3 17
+
+  # === Step 6: Execute format ===
   # Add label if specified
   [[ -n "$LABEL" ]] && format_cmd+=" $label_flag \"$LABEL\""
 
@@ -582,12 +598,10 @@ while true; do
   select_disk
   while true; do
     if ! select_partition; then break; fi
-    if confirm_format && detect_and_format; then
+    if detect_and_format; then
       continue
     else
       continue
     fi
   done
 done
-
-

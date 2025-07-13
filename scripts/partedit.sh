@@ -22,11 +22,10 @@ get_disk_interface_type() {
   fi
   
   if [[ "$disk" == *mmc* ]]; then
-    removable=$(cat /sys/block/$disk/removable 2>/dev/null || echo "1")
-    if [[ "$removable" == "1" ]]; then
-      echo "MMC"
-    else
+    if [[ -e "/sys/block/${disk}boot0" || -e "/sys/block/${disk}boot1" ]]; then
       echo "eMMC"
+    else
+      echo "SD/MMC"
     fi
     return
   fi
@@ -44,6 +43,7 @@ get_disk_interface_type() {
 
   # Get lspci output and convert to lowercase
   lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  [[ -z "$lspci_out" ]] && { echo "Unknown"; return; }
 
   # Identify controller type
  
@@ -120,7 +120,7 @@ while true; do
     [[ "$type" != "disk" ]] && continue
     
     # Installer device skipped
-    [[ "$disk" == "$INSTLDR_DEVICE" ]] && continue
+    [[ "$(basename "$disk")" == "$(basename "$INSTLDR_DEVICE")" ]] && continue
 
     size_bytes=$(lsblk -dn -o SIZE -b "$disk_path" 2>/dev/null)
     size_kb=$((size_bytes / 1024))
@@ -177,5 +177,3 @@ while true; do
     sudo blockdev --rereadpt "$DISK_SELECTED"
   fi
 done
-
-
