@@ -9,21 +9,20 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 
 - **Supports a wide range of Windows NT versions:** NT 3.1, NT 3.5, NT 3.51, NT 4.0, Windows 2000, Windows XP (x86 & x64) both vanilla and patched editions.
 - **Fast installation:** Deploys OS setups in just a few seconds.
-- **Compatible with modern and legacy hardware:** Supports IDE, AHCI, NVMe, and RAID controllers. Also contains USB 1.x/2.x/3.x and ACPI patches.
-- **Simple bash-based installation scripts:** Designed for easy automation and customization.
-- **Modular design:** Uses configuration files for editions, OS lists, and bootloader settings.
-- **Open Source:** Licensed under GNU GPLv3 for maximum freedom.
+- **Compatible with modern and legacy hardware:** Supports numerous controllers and patches.
+- **Open Source:** Licensed under GNU GPLv3 for maximum "open-source" freedom.
 - **Cross-platform ISO build:** Supports building bootable ISO images using syslinux (vmlinuz + core.gz) that work on both Linux and Windows systems.
-- **Bootable ISO creation:** The folder contents can be directly converted into a bootable ISO file ready for USB or CD/DVD deployment.
+- **Bootable ISO creation:** The folder contents can be directly converted into a bootable ISO file ready for writing to USB or CD/DVD.
 
 ---
 
 ## Important Notes
 - All operating systems used, including Windows®, are trademarks of Microsoft Corporation. This product is not endorsed or affiliated with Microsoft Corporation.
 - This project is in **BETA** stage. Not responsible for any data loss, damage, or malfunction. Use at your own risk.
-- Installer only supports Legacy Boot/CSM mode. If you want to use the installer in a computer which does not support Legacy Boot/CSM mode, please look at the cool [CSMWrap](https://github.com/FlyGoat/csmwrap) project made by [FlyGoat](https://github.com/FlyGoat). It enables CSM support even on UEFI Class 3 systems. But it's still beta and may not work.
+- Installer only supports Legacy Boot/CSM mode. If you want to use the installer in a computer which does not support Legacy Boot/CSM mode, look at the cool project [CSMWrap](https://github.com/FlyGoat/csmwrap) made by [FlyGoat](https://github.com/FlyGoat). It enables CSM support even on UEFI Class 3 systems. But it's still beta and may not work.
 - Readme file will contain more information in the future.
-- Please don't hesitate to report any issues you find. I will try to fix them as best as I can, whenever I get free time.
+- Don't hesitate to report any issues you find. I will try to fix them as best as I can, whenever I get free time.
+- [Original repository](https://github.com/ages2001/Universal-NT-Installer) developed by ages2001.
 
 ---
 
@@ -41,7 +40,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 ## OS Requirements and Patches
 
 ### Windows NT 3.1 (Vanilla)
-- **Controller**: IDE or SATA (IDE) only
+- **Controller**: IDE or SATA (IDE)
 - **IRQ Assignment**: Disk controller must be assigned to IRQ 14
 - **Position**: Primary master (channel 0, position 0) for PATA IDE, SATA first port (port 0) for SATA IDE
 - **Filesystem**: FAT12 or FAT16 CHS
@@ -49,7 +48,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Free Space**: At least 60 MiB
 
 ### Windows NT 3.50 / 3.51 (Vanilla)
-- **Controller**: IDE or SATA (IDE) only
+- **Controller**: IDE or SATA (IDE)
 - **Position**: Primary or secondary master (channel 0 or 1, position 0) for PATA IDE 
 - **Filesystem**: FAT12 or FAT16 CHS
 - **Disk Layout**: Entire partition must be within first 8.3 GB (CHS-accessible)
@@ -62,38 +61,38 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Patches Applied**: UniATA, FAT32
 
 ### Windows NT 4.00 (Vanilla)
-- **Controller**: IDE or SATA (IDE) only
+- **Controller**: IDE or SATA (IDE)
 - **Filesystem**: FAT12, FAT16 CHS/LBA, or NTFS
 - **Disk Layout**: Must reside within first 137.4 GB of disk
 - **Free Space**: At least 140 MiB
 
 ### Windows NT 4.00 (Patched)
 - **Controller**: IDE, SATA (IDE) or AHCI
-- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, NTFS
+- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA NTFS
 - **Free Space**: At least 160 MiB
 - **Patches Applied**: UniATA, FAT32, USB 1.x/2.0
 
 ### Windows 2000 (Vanilla)
-- **Controller**: IDE or SATA (IDE) only
-- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
+- **Controller**: IDE or SATA (IDE)
+- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA or NTFS
 - **Free Space**: At least 650 MiB
 
 ### Windows 2000 (Patched)
 - **Controller**: IDE, SATA (IDE), AHCI or NVMe
-- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
+- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA or NTFS
 - **Free Space**: At least 980 MiB
-- **Patches Applied**: ACPI, USB 1.x/2.x/3.x, AHCI, NVMe
+- **Patches Applied**: ACPI, USB 1.x/2.0/3.x, AHCI, NVMe, exFAT
 
 ### Windows XP (Vanilla)
-- **Controller**: IDE or SATA (IDE) only
-- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
+- **Controller**: IDE or SATA (IDE)
+- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA or NTFS
 - **Free Space**: At least 1.5 GiB for x86, 2.2 GiB for x64
 
 ### Windows XP (Patched)
-- **Controller**: IDE, SATA (IDE), AHCI, RAID or NVMe
-- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA, or NTFS
+- **Controller**: IDE, SATA (IDE), AHCI, RAID, eMMC or NVMe
+- **Filesystem**: FAT12, FAT16 CHS/LBA, FAT32 CHS/LBA or NTFS
 - **Free Space**: At least 1.5 GiB for x86, 2.2 GiB for x64
-- **Patches Applied**: ACPI, USB 3.x, AHCI, RAID, NVMe
+- **Patches Applied**: ACPI, USB 3.x, AHCI, RAID, eMMC, NVMe
 
 ---
 
@@ -101,7 +100,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 - **Drivers for booting**: Successful installation cannot be guaranteed in all cases, as driver-related issues may arise.
 - **CHS and LBA**: CHS (Cylinder-Head-Sector) addressing is required for early NT editions and mandates small partition sizes.
 - **Boot Partition**: Must exist and be a primary, supported filesystem (FAT12/FAT16/FAT32/NTFS).
-- **exFAT Filesystem**: Windows 2000 Patched and Windows XP Vanilla/Patched can read and write an exFAT partition but cannot boot from it because NTLDR cannot recognize exFAT partitions. So, you cannot install it to exFAT partition. However, you can create/delete/format exFAT partitions using Partition Editor/Formatter.
+- **exFAT Filesystem**: Windows 2000 Patched and Windows XP Vanilla/Patched (x86/x64) can read and write an exFAT partition but cannot boot from it because NTLDR cannot recognize exFAT partitions. So, you cannot install it to exFAT partition. However, you can create/delete/format exFAT partitions using Partition Editor/Formatter.
 
 ---
 
@@ -135,7 +134,6 @@ The installation process consists of booting the target PC from a prepared ISO f
 No additional setup on the target PC is needed beyond booting from the prepared media.
 
 ---
-
 
 ## ISO Building Instructions
 
