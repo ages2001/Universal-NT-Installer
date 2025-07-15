@@ -30,7 +30,7 @@ Universal NT Installer is a lightweight, fast, and versatile setup utility desig
 
 - CPU: At least i486
 - RAM: 68 MiB of memory
-- Disk: MBR scheme and IDE/AHCI/RAID/NVMe controller supported by Tiny Core Linux
+- Disk: MBR/GPT/SGI/SUN scheme and compatible hard disk controller supported by Tiny Core Linux
 - Installation media: USB or CD/DVD at least 2.5 GiB
 
 **NOTE:** For Windows XP x64, x86-64 Intel or AMD CPU is required!
