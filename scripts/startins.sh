@@ -206,7 +206,9 @@ dialog --infobox "Setup is updating disk boot record and adding/editing menu ent
 sudo cp -f "/mnt/isofiles/bootldr/$LDR_FILE" "$TEMP_BOOT/$LDR_FILE"
 sudo cp -f /mnt/isofiles/bootldr/GRLDR "$TEMP_BOOT/"
 sudo cp -f /mnt/isofiles/bootldr/NTDETECT.COM "$TEMP_BOOT/"
-[[ -f /mnt/isofiles/bootldr/bootlace.com ]] && sudo /mnt/isofiles/bootldr/bootlace.com "$DISK" >/dev/null 2>&1
+
+# === Update bootloader ===
+[[ -f /tmp/files/bootldr/bootlace.com ]] && chmod 777 /tmp/files/bootldr/bootlace.com && sudo /tmp/files/bootldr/bootlace.com "$DISK" >/dev/null 2>&1
 sudo parted "$DISK" set "$BOOT_PART_NUM" boot on >/dev/null 2>&1
 
 # === Update boot.ini ===
