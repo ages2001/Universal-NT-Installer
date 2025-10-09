@@ -196,6 +196,14 @@ get_bootini_number() {
   echo "$bootini_part_num"
 }
 
+check_appletv() {
+  if [[ $(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null) == "AppleTV1,1" ]]; then
+    echo "Yes"
+  else
+    echo "No"
+  fi
+}
+
 BOOT_PART_NAME=$(make_partition_path "$DISK" "$BOOT_PART_NUM")
 
 # Unhide partitions if flagged hidden
@@ -347,263 +355,266 @@ if [[ -z "$SYS_DIR" ]]; then
   exit 1
 fi
 
-# === Apply ACPI Patch ==
-ACPI_SRC=""
-BASE_DIR="/mnt/isofiles/drivers/patched/ACPI"
+IS_APPLETV=$(check_appletv)
 
-if [[ "$EDITION_DESC" == *"2000"* && "$EDITION_DESC" == *"Patched"* ]]; then
-  ACPI_SRC=$(find "$BASE_DIR/NT50" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
-elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 86 && "$EDITION_DESC" == *"NT 5.1 Patched"* ]]; then
-  ACPI_SRC=$(find "$BASE_DIR/NT51" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
-elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 86 && "$EDITION_DESC" == *"NT 5.2 Patched"* ]]; then
-  ACPI_SRC=$(find "$BASE_DIR/NT52x86" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
-elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 64 && "$EDITION_DESC" == *"Patched"* ]]; then
-  ACPI_SRC=$(find "$BASE_DIR/NT52x64" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
-fi
+if [[ "$IS_APPLETV" == "No" ]]; then
+  # === Apply ACPI Patch ==
+  ACPI_SRC=""
+  BASE_DIR="/mnt/isofiles/drivers/patched/ACPI"
 
-if [[ -n "$ACPI_SRC" && -f "$ACPI_SRC" ]]; then
-  DRIVERS_DIR=$(find "$MOUNT_POINT/$SYS_DIR" -type d -ipath "*/system32/drivers" | head -n1)
-
-  if [[ -n "$DRIVERS_DIR" ]]; then
-    ACPI_FILE=$(find "$DRIVERS_DIR" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
-
-    if [[ -n "$ACPI_FILE" ]]; then
-      sudo mv "$ACPI_FILE" "$DRIVERS_DIR/acpi.rsc" 2>/dev/null
-    fi
-
-    sudo cp "$ACPI_SRC" "$DRIVERS_DIR/"
-  fi
-fi
-
-if [[ "$SETUP_TYPE" -eq 1 ]]; then
-  # NTLDR selection menu for custom install
-  NTLDR_SELECTED=$(dialog --clear --nocancel \
-    --title "NTLDR Selection" \
-    --menu "Which NTLDR type do you want to use?\n\nNOTE: If you are installing Windows XP or 2003, select 'Windows XP NTLDR'.\nFor Windows 2000 or older NT versions, select 'Windows 2000 NTLDR'." \
-    14 72 2 \
-    1 "Windows XP NTLDR" \
-    2 "Windows 2000 NTLDR" \
-    3>&1 1>&2 2>&3)
-
-  if [[ "$NTLDR_SELECTED" -eq 1 ]]; then
-    LDR_FILE="cmxpldr"
-	TITLE="Windows XP/2003 Custom WIM"
-  elif [[ "$NTLDR_SELECTED" -eq 2 ]]; then
-    LDR_FILE="cm2kldr"
-	TITLE="Windows NT3/NT4/2000 Custom WIM"
-  fi
-fi
-
-# === Copy bootloader files ===
-sudo cp -f "/mnt/isofiles/bootldr/$LDR_FILE" "$TEMP_BOOT/$LDR_FILE"
-sudo cp -f /mnt/isofiles/bootldr/GRLDR "$TEMP_BOOT/"
-sudo cp -f /mnt/isofiles/bootldr/NTDETECT.COM "$TEMP_BOOT/"
-
-# === Confirmation before bootloader update ===
-dialog --yesno "WARNING!\n\nSetup will be install the Grub4dos MBR on $DISK.\nThis may overwrite the existing MBR.\n\nNOTE: If you choose 'No', you have to install Grub4dos later which is essential for NT booting!\n\nDo you want to continue?" 13 80
-
-# === Update bootloader ===
-if [[ $? -eq 0 ]]; then
-  # User selected Yes → install MBR
-  if [[ -f /tmp/files/bootldr/bootlace.com ]]; then
-    dialog --infobox "Setup is updating MBR..." 4 27
-  
-    chmod 777 /tmp/files/bootldr/bootlace.com
-    if sudo /tmp/files/bootldr/bootlace.com "$DISK" >/dev/null 2>&1; then
-      :
-    else
-      dialog --msgbox "ERROR: Failed to update MBR on $DISK!\n\nYou have to install Grub4dos manually!" 7 75
-    fi
-  else
-    dialog --msgbox "ERROR: bootlace.com not found!" 5 50
-  fi
-fi
-
-sudo parted "$DISK" set "$BOOT_PART_NUM" boot on >/dev/null 2>&1
-
-# === Show dialog for boot menu updates ===
-dialog --infobox "Setup is adding/editing boot menu entries..." 4 45
-
-# === Update boot.ini ===
-BOOTINI_EXISTING="$TEMP_BOOT/$INI_FILE"
-BOOTINI_NEW="/mnt/isofiles/bootldr/$INI_FILE"
-DISK_NUM=$(get_disk_number)
-BOOTINI_PART_NUM=0
-
-if [[ "$OS_CODE" =~ XP ]] || [[ "$SETUP_TYPE" -eq 1 ]]; then
-  BOOTINI_EXISTING="$TEMP_BOOT/boot.ini"
-fi
-
-if [[ "$SETUP_TYPE" -eq 1 ]]; then
-  BOOTINI_NEW="/mnt/isofiles/bootldr/cmbt.ini"
-elif [[ "$SETUP_TYPE" -eq 0 ]]; then
   if [[ "$EDITION_DESC" == *"2000"* && "$EDITION_DESC" == *"Patched"* ]]; then
-    BOOTINI_NEW="/mnt/isofiles/bootldr/bt2kp.ini"
-  elif [[ "$OS_CODE" == "XP86" && "$EDITION_DESC" == *"NT 5.1 Patched"* ]]; then
-    BOOTINI_NEW="/mnt/isofiles/bootldr/xp86p51p.ini"
-  elif [[ "$OS_CODE" == "XP86" && "$EDITION_DESC" == *"NT 5.2 Patched"* ]]; then
-    BOOTINI_NEW="/mnt/isofiles/bootldr/xp86p52p.ini"
-  elif [[ "$OS_CODE" == "XP64" && "$EDITION_DESC" == *"Patched"* ]]; then
-    BOOTINI_NEW="/mnt/isofiles/bootldr/xp64pp.ini"
-  fi
-fi
-
-# Get partition number for the boot.ini path
-read BOOTINI_PART_NUM < <(get_bootini_number "$DISK" "$OS_PART_NAME")
-
-if [[ -f "$BOOTINI_EXISTING" ]]; then
-  # Read all ARC paths from the new file
-  NEW_PATHS=()
-  while IFS= read -r line; do
-    NEW_PATHS+=("$line")
-  done < <(sudo grep -Ei '^(multi|scsi)\([0-9]+\)' "$BOOTINI_NEW")
-
-  if (( ${#NEW_PATHS[@]} == 0 )); then
-    dialog --msgbox "ERROR: Setup could not add/edit boot entries!\n\nSetup aborted!" 7 75
-  
-    # === Unmount partitions ===
-    [[ "$TEMP_BOOT" != "$MOUNT_POINT" ]] && sudo umount "$TEMP_BOOT" 2>/dev/null
-    sudo umount "$MOUNT_POINT" 2>/dev/null
-  
-    exit 1
+    ACPI_SRC=$(find "$BASE_DIR/NT50" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
+  elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 86 && "$EDITION_DESC" == *"NT 5.1 Patched"* ]]; then
+    ACPI_SRC=$(find "$BASE_DIR/NT51" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
+  elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 86 && "$EDITION_DESC" == *"NT 5.2 Patched"* ]]; then
+    ACPI_SRC=$(find "$BASE_DIR/NT52x86" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
+  elif [[ "$EDITION_DESC" =~ Windows\ XP && "$EDITION_DESC" =~ 64 && "$EDITION_DESC" == *"Patched"* ]]; then
+    ACPI_SRC=$(find "$BASE_DIR/NT52x64" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
   fi
 
-  # Delete old OS paths from existing ini file
-  sudo sed -i -E "/^(multi\(0\)|scsi\(0\))disk\(0\)rdisk\($DISK_NUM\)partition\($BOOTINI_PART_NUM\)/d" "$BOOTINI_EXISTING"
- 
-  # Create full list of modified new lines
-  MODIFIED_LINES=()
-  for newline in "${NEW_PATHS[@]}"; do
-    CLEAN_LINE=$(echo "$newline" | sed -E 's/ *\(disk [0-9]+ part [0-9]+\)//')
-    MOD_LINE=$(echo "$CLEAN_LINE" | sed -E "s/partition\([0-9]+\)/partition($BOOTINI_PART_NUM)/" | \
-      sed -E "s/\"(.*)\"/\1 (disk $DISK_NUM part $BOOTINI_PART_NUM)\"/")
+  if [[ -n "$ACPI_SRC" && -f "$ACPI_SRC" ]]; then
+    DRIVERS_DIR=$(find "$MOUNT_POINT/$SYS_DIR" -type d -ipath "*/system32/drivers" | head -n1)
 
-    if [[ "$SETUP_TYPE" -eq 1 ]]; then
-      MOD_LINE=$(echo "$MOD_LINE" | sed -E "s#(\\\\)[^=]*=(.*)#\1$SYS_DIR=\"\2#")
+    if [[ -n "$DRIVERS_DIR" ]]; then
+      ACPI_FILE=$(find "$DRIVERS_DIR" -maxdepth 1 -type f -iname "acpi.sys" | head -n1)
+
+      if [[ -n "$ACPI_FILE" ]]; then
+        sudo mv "$ACPI_FILE" "$DRIVERS_DIR/acpi.rsc" 2>/dev/null
+      fi
+
+      sudo cp "$ACPI_SRC" "$DRIVERS_DIR/"
+    fi
+  fi
+
+  if [[ "$SETUP_TYPE" -eq 1 ]]; then
+    # NTLDR selection menu for custom install
+    NTLDR_SELECTED=$(dialog --clear --nocancel \
+      --title "NTLDR Selection" \
+      --menu "Which NTLDR type do you want to use?\n\nNOTE: If you are installing Windows XP or 2003, select 'Windows XP NTLDR'.\nFor Windows 2000 or older NT versions, select 'Windows 2000 NTLDR'." \
+      14 72 2 \
+      1 "Windows XP NTLDR" \
+      2 "Windows 2000 NTLDR" \
+      3>&1 1>&2 2>&3)
+
+    if [[ "$NTLDR_SELECTED" -eq 1 ]]; then
+      LDR_FILE="cmxpldr"
+    TITLE="Windows XP/2003 Custom WIM"
+    elif [[ "$NTLDR_SELECTED" -eq 2 ]]; then
+      LDR_FILE="cm2kldr"
+    TITLE="Windows NT3/NT4/2000 Custom WIM"
+    fi
+  fi
+
+  # === Copy bootloader files ===
+  sudo cp -f "/mnt/isofiles/bootldr/$LDR_FILE" "$TEMP_BOOT/$LDR_FILE"
+  sudo cp -f /mnt/isofiles/bootldr/GRLDR "$TEMP_BOOT/"
+  sudo cp -f /mnt/isofiles/bootldr/NTDETECT.COM "$TEMP_BOOT/"
+
+  # === Confirmation before bootloader update ===
+  dialog --yesno "WARNING!\n\nSetup will be install the Grub4dos MBR on $DISK.\nThis may overwrite the existing MBR.\n\nNOTE: If you choose 'No', you have to install Grub4dos later which is essential for NT booting!\n\nDo you want to continue?" 13 80
+
+  # === Update bootloader ===
+  if [[ $? -eq 0 ]]; then
+    # User selected Yes → install MBR
+    if [[ -f /tmp/files/bootldr/bootlace.com ]]; then
+      dialog --infobox "Setup is updating MBR..." 4 27
+    
+      chmod 777 /tmp/files/bootldr/bootlace.com
+      if sudo /tmp/files/bootldr/bootlace.com "$DISK" >/dev/null 2>&1; then
+        :
+      else
+        dialog --msgbox "ERROR: Failed to update MBR on $DISK!\n\nYou have to install Grub4dos manually!" 7 75
+      fi
+    else
+      dialog --msgbox "ERROR: bootlace.com not found!" 5 50
+    fi
+  fi
+
+  sudo parted "$DISK" set "$BOOT_PART_NUM" boot on >/dev/null 2>&1
+
+  # === Show dialog for boot menu updates ===
+  dialog --infobox "Setup is adding/editing boot menu entries..." 4 45
+
+  # === Update boot.ini ===
+  BOOTINI_EXISTING="$TEMP_BOOT/$INI_FILE"
+  BOOTINI_NEW="/mnt/isofiles/bootldr/$INI_FILE"
+  DISK_NUM=$(get_disk_number)
+  BOOTINI_PART_NUM=0
+
+  if [[ "$OS_CODE" =~ XP ]] || [[ "$SETUP_TYPE" -eq 1 ]]; then
+    BOOTINI_EXISTING="$TEMP_BOOT/boot.ini"
+  fi
+
+  if [[ "$SETUP_TYPE" -eq 1 ]]; then
+    BOOTINI_NEW="/mnt/isofiles/bootldr/cmbt.ini"
+  elif [[ "$SETUP_TYPE" -eq 0 ]]; then
+    if [[ "$EDITION_DESC" == *"2000"* && "$EDITION_DESC" == *"Patched"* ]]; then
+      BOOTINI_NEW="/mnt/isofiles/bootldr/bt2kp.ini"
+    elif [[ "$OS_CODE" == "XP86" && "$EDITION_DESC" == *"NT 5.1 Patched"* ]]; then
+      BOOTINI_NEW="/mnt/isofiles/bootldr/xp86p51p.ini"
+    elif [[ "$OS_CODE" == "XP86" && "$EDITION_DESC" == *"NT 5.2 Patched"* ]]; then
+      BOOTINI_NEW="/mnt/isofiles/bootldr/xp86p52p.ini"
+    elif [[ "$OS_CODE" == "XP64" && "$EDITION_DESC" == *"Patched"* ]]; then
+      BOOTINI_NEW="/mnt/isofiles/bootldr/xp64pp.ini"
+    fi
+  fi
+
+  # Get partition number for the boot.ini path
+  read BOOTINI_PART_NUM < <(get_bootini_number "$DISK" "$OS_PART_NAME")
+
+  if [[ -f "$BOOTINI_EXISTING" ]]; then
+    # Read all ARC paths from the new file
+    NEW_PATHS=()
+    while IFS= read -r line; do
+      NEW_PATHS+=("$line")
+    done < <(sudo grep -Ei '^(multi|scsi)\([0-9]+\)' "$BOOTINI_NEW")
+
+    if (( ${#NEW_PATHS[@]} == 0 )); then
+      dialog --msgbox "ERROR: Setup could not add/edit boot entries!\n\nSetup aborted!" 7 75
+    
+      # === Unmount partitions ===
+      [[ "$TEMP_BOOT" != "$MOUNT_POINT" ]] && sudo umount "$TEMP_BOOT" 2>/dev/null
+      sudo umount "$MOUNT_POINT" 2>/dev/null
+    
+      exit 1
     fi
 
-    MODIFIED_LINES+=("$MOD_LINE")
-  done
+    # Delete old OS paths from existing ini file
+    sudo sed -i -E "/^(multi\(0\)|scsi\(0\))disk\(0\)rdisk\($DISK_NUM\)partition\($BOOTINI_PART_NUM\)/d" "$BOOTINI_EXISTING"
+  
+    # Create full list of modified new lines
+    MODIFIED_LINES=()
+    for newline in "${NEW_PATHS[@]}"; do
+      CLEAN_LINE=$(echo "$newline" | sed -E 's/ *\(disk [0-9]+ part [0-9]+\)//')
+      MOD_LINE=$(echo "$CLEAN_LINE" | sed -E "s/partition\([0-9]+\)/partition($BOOTINI_PART_NUM)/" | \
+        sed -E "s/\"(.*)\"/\1 (disk $DISK_NUM part $BOOTINI_PART_NUM)\"/")
 
-  TMP_FILE=$(mktemp)
-  INSIDE_OS_SECTION=0
-  OLD_OS_LINES=()
+      if [[ "$SETUP_TYPE" -eq 1 ]]; then
+        MOD_LINE=$(echo "$MOD_LINE" | sed -E "s#(\\\\)[^=]*=(.*)#\1$SYS_DIR=\"\2#")
+      fi
 
-  while IFS= read -r line; do
-    # Remove CR character if present (from Windows line endings)
-    line=${line%$'\r'}
-	
-    # Write the new default system path to the default line 
-    if [[ "${line,,}" == default=* ]]; then
-      line="${line%%\\*}\\$SYS_DIR"
-    fi
+      MODIFIED_LINES+=("$MOD_LINE")
+    done
 
-    # Detect [operating systems] section header (case-insensitive)
-    if [[ "${line,,}" == "[operating systems]" ]]; then
-      INSIDE_OS_SECTION=1
+    TMP_FILE=$(mktemp)
+    INSIDE_OS_SECTION=0
+    OLD_OS_LINES=()
+
+    while IFS= read -r line; do
+      # Remove CR character if present (from Windows line endings)
+      line=${line%$'\r'}
+    
+      # Write the new default system path to the default line 
+      if [[ "${line,,}" == default=* ]]; then
+        line="${line%%\\*}\\$SYS_DIR"
+      fi
+
+      # Detect [operating systems] section header (case-insensitive)
+      if [[ "${line,,}" == "[operating systems]" ]]; then
+        INSIDE_OS_SECTION=1
+        printf '%s\r\n' "$line" >> "$TMP_FILE"
+
+        # Write new lines first
+        for mod in "${MODIFIED_LINES[@]}"; do
+          printf '%s\r\n' "$mod" >> "$TMP_FILE"
+        done
+
+        # Then old lines directly after new ones (same block)
+        for old in "${OLD_OS_LINES[@]}"; do
+          printf '%s\r\n' "$old" >> "$TMP_FILE"
+        done
+
+        continue
+      fi
+
+      # If inside [operating systems] section but a new section begins
+      if [[ $INSIDE_OS_SECTION -eq 1 && "$line" =~ ^\[.*\]$ ]]; then
+        INSIDE_OS_SECTION=0
+        printf '%s\r\n' "$line" >> "$TMP_FILE"
+        continue
+      fi
+
+      # Collect existing lines inside the [operating systems] section
+      if [[ $INSIDE_OS_SECTION -eq 1 ]]; then
+        OLD_OS_LINES+=("$line")
+        continue
+      fi
+
+        # All other lines are copied directly
       printf '%s\r\n' "$line" >> "$TMP_FILE"
+    done < "$BOOTINI_EXISTING"
 
-      # Write new lines first
-      for mod in "${MODIFIED_LINES[@]}"; do
-        printf '%s\r\n' "$mod" >> "$TMP_FILE"
-      done
-
-      # Then old lines directly after new ones (same block)
+    # In case file ends inside OS section, append old lines
+    if [[ $INSIDE_OS_SECTION -eq 1 ]]; then
       for old in "${OLD_OS_LINES[@]}"; do
         printf '%s\r\n' "$old" >> "$TMP_FILE"
       done
-
-      continue
     fi
 
-    # If inside [operating systems] section but a new section begins
-    if [[ $INSIDE_OS_SECTION -eq 1 && "$line" =~ ^\[.*\]$ ]]; then
-      INSIDE_OS_SECTION=0
-      printf '%s\r\n' "$line" >> "$TMP_FILE"
-      continue
+    # Apply the updated file
+    sudo cp "$TMP_FILE" "$BOOTINI_EXISTING"
+    rm "$TMP_FILE"
+  else
+    TMP_BOOTINI=$(mktemp)
+    sudo cp "$BOOTINI_NEW" "$TMP_BOOTINI"
+
+    if [[ "$SETUP_TYPE" -eq 1 ]]; then
+    sudo sed -i -E "s#(default=.*\\\\)[^[:space:]]*#\1${SYS_DIR//\\/\\\\}#g" "$TMP_BOOTINI"
+      sudo sed -i -E "s#^(.*\\\\)[^=]*=#\1${SYS_DIR//\\/\\\\}=\"#g" "$TMP_BOOTINI"
+    elif [[ "$SETUP_TYPE" -eq 0 ]]; then
+      :
     fi
-
-    # Collect existing lines inside the [operating systems] section
-    if [[ $INSIDE_OS_SECTION -eq 1 ]]; then
-      OLD_OS_LINES+=("$line")
-      continue
-    fi
-
-      # All other lines are copied directly
-    printf '%s\r\n' "$line" >> "$TMP_FILE"
-  done < "$BOOTINI_EXISTING"
-
-  # In case file ends inside OS section, append old lines
-  if [[ $INSIDE_OS_SECTION -eq 1 ]]; then
-    for old in "${OLD_OS_LINES[@]}"; do
-      printf '%s\r\n' "$old" >> "$TMP_FILE"
-    done
+    
+    sudo cp -f "$TMP_BOOTINI" "$BOOTINI_EXISTING"
+    sudo rm -f "$TMP_BOOTINI"
+    
+    sudo sed -i -E "s/partition\([0-9]+\)/partition($BOOTINI_PART_NUM)/g" "$BOOTINI_EXISTING"
+    sudo sed -i -E "s/\"(.*)\"/\1 (disk $DISK_NUM part $BOOTINI_PART_NUM)\"/" "$BOOTINI_EXISTING"
   fi
 
-  # Apply the updated file
-  sudo cp "$TMP_FILE" "$BOOTINI_EXISTING"
-  rm "$TMP_FILE"
-else
-  TMP_BOOTINI=$(mktemp)
-  sudo cp "$BOOTINI_NEW" "$TMP_BOOTINI"
+  awk -v partnum="$BOOTINI_PART_NUM" '
+  { if ($0 ~ /^default=.*partition\([0-9]+\)/) gsub(/partition\([0-9]+\)/, "partition(" partnum ")"); print }
+  ' "$BOOTINI_EXISTING" > /tmp/bootini.tmp && sudo mv /tmp/bootini.tmp "$BOOTINI_EXISTING"
 
-  if [[ "$SETUP_TYPE" -eq 1 ]]; then
-	sudo sed -i -E "s#(default=.*\\\\)[^[:space:]]*#\1${SYS_DIR//\\/\\\\}#g" "$TMP_BOOTINI"
-    sudo sed -i -E "s#^(.*\\\\)[^=]*=#\1${SYS_DIR//\\/\\\\}=\"#g" "$TMP_BOOTINI"
-  elif [[ "$SETUP_TYPE" -eq 0 ]]; then
-    :
+  # Get system support status
+  ACPI_SUPPORT=$(check_acpi)
+  APIC_SUPPORT=$(check_apic)
+  PAE_SUPPORT=$(check_pae)
+  MPS_SUPPORT=$(check_mps)
+
+  # Remove MPS lines if system does not support MPS (NT 3.50 supports only MPS Revision 1.1)
+  if [[ "$MPS_SUPPORT" == "No" || ( "$OS_CODE" == "NT350" && "$MPS_SUPPORT" != "1.1" ) ]]; then
+    sed -i '/MPS/d' "$BOOTINI_EXISTING"
   fi
-  
-  sudo cp -f "$TMP_BOOTINI" "$BOOTINI_EXISTING"
-  sudo rm -f "$TMP_BOOTINI"
-  
-  sudo sed -i -E "s/partition\([0-9]+\)/partition($BOOTINI_PART_NUM)/g" "$BOOTINI_EXISTING"
-  sudo sed -i -E "s/\"(.*)\"/\1 (disk $DISK_NUM part $BOOTINI_PART_NUM)\"/" "$BOOTINI_EXISTING"
-fi
 
-awk -v partnum="$BOOTINI_PART_NUM" '
-{ if ($0 ~ /^default=.*partition\([0-9]+\)/) gsub(/partition\([0-9]+\)/, "partition(" partnum ")"); print }
-' "$BOOTINI_EXISTING" > /tmp/bootini.tmp && sudo mv /tmp/bootini.tmp "$BOOTINI_EXISTING"
+  # Remove ACPI lines if system does not support ACPI
+  if [[ "$ACPI_SUPPORT" == "No" ]]; then
+    sed -i '/ACPI/d' "$BOOTINI_EXISTING"
+  fi
 
-# Get system support status
-ACPI_SUPPORT=$(check_acpi)
-APIC_SUPPORT=$(check_apic)
-PAE_SUPPORT=$(check_pae)
-MPS_SUPPORT=$(check_mps)
+  # Remove APIC and MPS lines if system does not support APIC
+  if [[ "$APIC_SUPPORT" == "No" ]]; then
+    sed -i '/APIC/d' "$BOOTINI_EXISTING"
+    sed -i '/MPS/d' "$BOOTINI_EXISTING"
+  fi
 
-# Remove MPS lines if system does not support MPS (NT 3.50 supports only MPS Revision 1.1)
-if [[ "$MPS_SUPPORT" == "No" || ( "$OS_CODE" == "NT350" && "$MPS_SUPPORT" != "1.1" ) ]]; then
-  sed -i '/MPS/d' "$BOOTINI_EXISTING"
-fi
+  # Remove PAE lines if system does not support PAE
+  if [[ "$PAE_SUPPORT" == "No" ]]; then
+    sed -i '/\/PAE/d' "$BOOTINI_EXISTING"
+  fi
 
-# Remove ACPI lines if system does not support ACPI
-if [[ "$ACPI_SUPPORT" == "No" ]]; then
-  sed -i '/ACPI/d' "$BOOTINI_EXISTING"
-fi
+  # Convert to Windows-style line endings (CRLF)
+  sudo unix2dos "$BOOTINI_EXISTING"
 
-# Remove APIC and MPS lines if system does not support APIC
-if [[ "$APIC_SUPPORT" == "No" ]]; then
-  sed -i '/APIC/d' "$BOOTINI_EXISTING"
-  sed -i '/MPS/d' "$BOOTINI_EXISTING"
-fi
+  # === Update GRUB menu.lst ===
+  G4D_ROOT_DISK_NUM=0
+  G4D_ROOT_PART_NUM=$((BOOT_PART_NUM - 1))
+  MENU_LST="$TEMP_BOOT/menu.lst"
+  ROOT_LINE="root (hd$G4D_ROOT_DISK_NUM,$G4D_ROOT_PART_NUM)"
+  MAKEACTIVE_LINE="makeactive"
+  CHAINLOADER_LINE="chainloader /$LDR_FILE"
 
-# Remove PAE lines if system does not support PAE
-if [[ "$PAE_SUPPORT" == "No" ]]; then
-  sed -i '/\/PAE/d' "$BOOTINI_EXISTING"
-fi
-
-# Convert to Windows-style line endings (CRLF)
-sudo unix2dos "$BOOTINI_EXISTING"
-
-# === Update GRUB menu.lst ===
-G4D_ROOT_DISK_NUM=0
-G4D_ROOT_PART_NUM=$((BOOT_PART_NUM - 1))
-MENU_LST="$TEMP_BOOT/menu.lst"
-ROOT_LINE="root (hd$G4D_ROOT_DISK_NUM,$G4D_ROOT_PART_NUM)"
-MAKEACTIVE_LINE="makeactive"
-CHAINLOADER_LINE="chainloader /$LDR_FILE"
-
-read -r -d '' NEW_ENTRY <<EOF
+  read -r -d '' NEW_ENTRY <<EOF
 
 title $TITLE
 $ROOT_LINE
@@ -612,13 +623,24 @@ $CHAINLOADER_LINE
 
 EOF
 
-[[ ! -f "$MENU_LST" ]] && echo -e "timeout 10\n" | sudo tee "$MENU_LST" >/dev/null
+  [[ ! -f "$MENU_LST" ]] && echo -e "timeout 10\n" | sudo tee "$MENU_LST" >/dev/null
 
-if ! grep -i -q "^title[[:space:]]\+$TITLE[[:space:]]*$" <(tr -d '\r' < "$MENU_LST"); then
-  echo -e "$NEW_ENTRY\n" | sudo tee -a "$MENU_LST" >/dev/null
+  if ! grep -i -q "^title[[:space:]]\+$TITLE[[:space:]]*$" <(tr -d '\r' < "$MENU_LST"); then
+    echo -e "$NEW_ENTRY\n" | sudo tee -a "$MENU_LST" >/dev/null
+  fi
+
+  sudo sed -i 's/$/\r/' "$MENU_LST"
+
 fi
-
-sudo sed -i 's/$/\r/' "$MENU_LST"
+if [[ "$IS_APPLETV" == "Yes" ]]; then
+  # On Apple TV, we have a bundled 'freeldr.ini' and FreeLoader, so we don't need to do any configuration. We also only have one HAL option because we only need one.
+  dialog --infobox "Setup is copying Apple TV files..." 4 45
+  sudo cp -fr /mnt/isofiles/bootldr/appletv/* $TEMP_BOOT
+  
+  # Set the OS partition to bootable so that FreeLoader can find it.
+  sudo parted "$DISK" set "$OS_PART_NUM" boot on >/dev/null 2>&1
+  
+fi # IS_APPLETV
 
 if [[ "$SETUP_TYPE" -eq 1 ]]; then
   # Registry Assign Drive Letter Patch - OS Selection for Custom Install

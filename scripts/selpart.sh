@@ -25,6 +25,14 @@ declare -A HAS_OLD_OS_MAP=()
 
 parts_scanned=0
 
+check_appletv() {
+  if [[ $(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null) == "AppleTV1,1" ]]; then
+    echo "Yes"
+  else
+    echo "No"
+  fi
+}
+
 scan_disks() {
   dialog --infobox "Scanning disks..." 3 22
 
@@ -404,7 +412,14 @@ check_partition_compatibility() {
       return 1
     fi
   fi
-
+  
+  # Apple TV (Any version)
+  if [[ "$edition_desc" =~ Bootloader ]]; then
+    if [[ "$fs_type" != "FAT12" && "$fs_type" != "FAT16 CHS" && "$fs_type" != "FAT16 LBA" && "$fs_type" != "FAT32 CHS" && "$fs_type" != "FAT32 LBA" ]]; then
+      dialog --msgbox "Incompatible bootloader partition!\n\nRequirements:\n* FAT12, FAT16, or FAT32 formatted partition" 9 60
+      return 1
+    fi
+  fi
   return 0
 }
 
@@ -460,6 +475,8 @@ check_free_space() {
     required_kb=$((1350 * 1024))
   elif [[ "$edition_desc" =~ Windows\ XP && "$edition_desc" =~ 64 && "$edition_desc" =~ Patched ]]; then
     required_kb=$((1450 * 1024))
+  elif [[ "$edition_desc" =~ Apple\ TV ]]; then
+    required_kb=$((50 * 1024))
   else
     required_kb=$((1536 * 1024))
   fi
@@ -731,25 +748,29 @@ check_disk_position() {
     dialog --msgbox "Could not extract ataX from DEVPATH: $devpath" 7 70
     return 1
   fi
+  
+  local appletv=$(check_appletv)
 
   # 5) Determine IDE channel (0 = primary, 1 = secondary) from dmesg by ataX
   # Only check for PATA IDE
-  if [[ "$controller" == "IDE" ]]; then
-    local channel=""
-    while read -r line; do
-      if [[ "$line" =~ ($ata_name).*cmd\ (0x[0-9a-f]+) ]]; then
-        case "${BASH_REMATCH[2]}" in
-          0x1f0) channel=0 ;;  # Primary
-          0x170) channel=1 ;;  # Secondary
-          *) channel="unknown" ;;
-        esac
-        break
-      fi
-    done < <(dmesg | grep -i "PATA max")
+  if [[ "$appletv" == "No" ]]; then # HACK!!!
+    if [[ "$controller" == "IDE" ]]; then
+      local channel=""
+      while read -r line; do
+        if [[ "$line" =~ ($ata_name).*cmd\ (0x[0-9a-f]+) ]]; then
+          case "${BASH_REMATCH[2]}" in
+            0x1f0) channel=0 ;;  # Primary
+            0x170) channel=1 ;;  # Secondary
+            *) channel="unknown" ;;
+          esac
+          break
+        fi
+      done < <(dmesg | grep -i "PATA max")
 
-    if [[ -z "$channel" || "$channel" == "unknown" ]]; then
-      dialog --msgbox "Unable to determine IDE channel for $ata_name based on dmesg output." 7 70
-      return 1
+      if [[ -z "$channel" || "$channel" == "unknown" ]]; then
+        dialog --msgbox "Unable to determine IDE channel for $ata_name based on dmesg output." 7 70
+        return 1
+      fi
     fi
   fi
 
@@ -962,11 +983,16 @@ while true; do
     continue
   }
   
-  BOOT_PART_NUM=$(parse_boot_part_num "$DISK_SELECTED")
-  if [[ "$BOOT_PART_NUM" == "-1" ]]; then
-    dialog --msgbox "Setup was unable to find a supported primary partition for booting the NT OS.\n\nPlease create a primary partition at least 4 MB formatted with one of the supported file systems:\n\n* FAT12\n* FAT16\n* FAT32\n* NTFS\n\nThen try again." 16 60
-    continue
+  IS_APPLETV=$(check_appletv)
+  
+  if [[ "$IS_APPLETV" == "No" ]]; then
+    BOOT_PART_NUM=$(parse_boot_part_num "$DISK_SELECTED")
+    if [[ "$BOOT_PART_NUM" == "-1" ]]; then
+      dialog --msgbox "Setup was unable to find a supported primary partition for booting the NT OS.\n\nPlease create a primary partition at least 4 MB formatted with one of the supported file systems:\n\n* FAT12\n* FAT16\n* FAT32\n* NTFS\n\nThen try again." 16 60
+      continue
+    fi
   fi
+
   
   if [[ "$parts_scanned" -eq 0 ]]; then  
     scan_partitions $DISK_SELECTED
@@ -982,7 +1008,7 @@ while true; do
 
     [[ $? -ne 0 || -z "$PART_SELECTED_INDEX" ]] && break
     
-    dialog --infobox "Checking OS partition requirements..." 3 42
+    dialog --infobox "Checking OS and platform partition requirements..." 3 42
 
     OS_PART_NAME="$PART_SELECTED_INDEX"
 
@@ -1057,6 +1083,34 @@ while true; do
       if ! dialog --yesno "Install partition must be unhidden in order to continue with the installation.\n\nSetup will make the install partition unhidden when it is installing OS.\n\nDo you want to continue?" 15 70; then
         continue
       fi
+    fi
+    
+    if [[ "$IS_APPLETV" == "Yes" ]]; then
+      ATVBOOT_SELECTED_INDEX=$(dialog --clear --backtitle "Bootloader Partition Selection" \
+      --title "Select Apple TV Bootloader Partition" \
+      --menu "Choose the partition for bootloader installation:" 20 80 10 "${PART_MENU[@]}" 3>&1 1>&2 2>&3)
+
+      [[ $? -ne 0 || -z "$ATVBOOT_SELECTED_INDEX" ]] && break
+      
+      BOOT_PART_NAME="$ATVBOOT_SELECTED_INDEX"
+      BOOT_PART_NUM=$(echo "$BOOT_PART_NAME" | grep -oE '[0-9]+$')
+      
+      FDISK_LINE=$(fdisk -l "$DISK_SELECTED" | grep "^$BOOT_PART_NAME")
+    
+      START_LBA=$(echo "$FDISK_LINE" | awk '{print $2}')
+      END_LBA=$(echo "$FDISK_LINE" | awk '{print $3}')
+      
+      part_type=$([[ $is_logical -eq 1 ]] && echo "LOG" || echo "PRI")
+    
+      if [[ "$part_type_id" == "0x5" || "$part_type_id" == "0xf" || "$part_type_id" == "0x15" || "$part_type_id" == "0x1f" ]]; then
+        part_type="EXT"
+      fi
+      
+      # Must be a FAT32 partition (could be HFS+ too but hell nah)
+      check_partition_compatibility "$part_type" "${PART_FS_MAP[$ATVBOOT_SELECTED_INDEX]}" "$DISK_SELECTED" "$START_LBA" "$END_LBA" "Apple TV Bootloader" || continue
+      check_free_space "${PART_FREE_KB_MAP[$ATVBOOT_SELECTED_INDEX]}" "Apple TV Bootloader" || continue
+      
+      
     fi
 
     if [[ "${HAS_OLD_OS_MAP[$OS_PART_NAME]:-0}" -eq 1 ]]; then
