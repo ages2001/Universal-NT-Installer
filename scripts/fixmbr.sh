@@ -7,199 +7,100 @@ if [[ -z "$INSTLR_DEVICE" ]]; then
   exit 1
 fi
 
+unset DISK_INFO
+declare -A DISK_INFO
 declare -a DISK_MENU=()
-declare -A DISK_INFO=()
 
-scan_disks() {
-  dialog --infobox "Scanning disks..." 3 22
-
-  for disk in /dev/sd? /dev/nvme?n? /dev/mmcblk?; do
-    [[ ! -b "$disk" ]] && continue
-    type=$(lsblk -dn -o TYPE "$disk" 2>/dev/null)
-    [[ "$type" != "disk" ]] && continue
-	
-	#  CNTRLR=$(get_disk_interface_type "$disk")
-	
-	#  case "$CNTRLR" in
-    #    "IDE"|"SATA (IDE)"|"AHCI"|"RAID"|"eMMC"|"NVMe"|"SCSI")
-    #      ;;  # accepted types -> do nothing
-    #    *)
-    #      continue  # skip unsupported types
-    #      ;;
-    #  esac
-    
-    # Installer device skipped
-    [[ $INSTLR_DEVICE == $disk* ]] && continue
-
-    part_table=$(parted -sm "$disk" print 2>/dev/null | grep "^/dev" | cut -d: -f6 | head -n 1)
-    [[ -z "$part_table" ]] && part_table="Unknown"
-    [[ "$part_table" == "msdos" ]] && part_table="MBR"
-    [[ "$part_table" == "gpt" ]] && part_table="GPT"
-	
-	[[ "$part_table" != "MBR" ]] && continue  # Only MBR disks will be displayed
-	
-	CNTRLR=$(get_disk_interface_type "$disk")
-
-    disk_basename=$(basename "$disk")
-    sector_size=$(cat /sys/block/$disk_basename/queue/hw_sector_size 2>/dev/null || echo 512)
-    sector_count=$(cat /sys/block/$disk_basename/size 2>/dev/null || echo 0)
-    size_bytes=$((sector_count * sector_size))
-    size_kb=$((size_bytes / 1024))
-    size_fmt=$(format_size "$size_kb")
-
-    DISK_MENU+=("$disk" "Size: $size_fmt | Type: $part_table | Cntrlr: $CNTRLR")
-    DISK_INFO["$disk,type"]="$part_table"
-    DISK_INFO["$disk,size"]="$size_fmt"
-  done
-
-  if [[ ${#DISK_MENU[@]} -eq 0 ]]; then
-    dialog --msgbox "No suitable disks found." 7 50
-    exit 1
-  fi
-}
-
-# Format size function: input in KB, output in KB/MB/GB/TB with decimals
-format_size() {
-  local size_kb=$1
-  local result
-
-  if awk "BEGIN {exit !($size_kb < 1024)}"; then
-    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb; fmt=sprintf("%.2f KB", val); print fmt }')
-  elif awk "BEGIN {exit !($size_kb < 1024*1024)}"; then
-    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024; fmt=sprintf("%.2f MB", val); print fmt }')
-  elif awk "BEGIN {exit !($size_kb < 1024*1024*1024)}"; then
-    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024/1024; fmt=sprintf("%.2f GB", val); print fmt }')
-  else
-    result=$(awk -v kb="$size_kb" 'BEGIN { val=kb/1024/1024/1024; fmt=sprintf("%.2f TB", val); print fmt }')
-  fi
-
-  echo "$result"
-}
-
-get_disk_interface_type() {
-  local disk="$1"
-  local sys_path pci_addr pci_id_short lspci_out
-
-  # Ensure we're using only the disk name (e.g., "sda" from "/dev/sda")
-  disk=$(basename "$disk")
-  
-  if [[ "$disk" == *nvme* ]]; then
-    echo "NVMe"
-    return
-  fi
-  
-  if [[ "$disk" == *mmc* ]]; then
-    if [[ -e "/sys/block/${disk}boot0" || -e "/sys/block/${disk}boot1" ]]; then
-      echo "eMMC"
-    else
-      echo "SD/MMC"
-    fi
-    return
-  fi
-  
-  # Get the sysfs path for the device
-  sys_path=$(readlink -f "/sys/block/$disk/device" 2>/dev/null)
-  [[ -z "$sys_path" ]] && { echo "Unknown"; return; }
-
-  # Extract the PCI address (e.g., 0000:00:1f.2 or 00:1f.2)
-  pci_addr=$(echo "$sys_path" | grep -oE '([[:alnum:]]{4}:)?[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]' | tail -n1)
-  [[ -z "$pci_addr" ]] && { echo "Unknown"; return; }
-
-  # Remove domain part if present (0000:) for use in lspci
-  pci_id_short="${pci_addr#0000:}"
-
-  # Get lspci output and convert to lowercase
-  lspci_out=$(lspci -s "$pci_id_short" 2>/dev/null | tr '[:upper:]' '[:lower:]')
-  [[ -z "$lspci_out" ]] && { echo "Unknown"; return; }
-
-  # Identify controller type
-  if echo "$lspci_out" | grep -qi "sata"; then
-    if echo "$lspci_out" | grep -qi "ahci"; then
-      echo "AHCI"
-    else
-      echo "SATA (IDE)"
-    fi
-    return
-  fi
-
-  if echo "$lspci_out" | grep -qi "ide"; then
-    echo "IDE"
-    return
-  fi
-
-  if echo "$lspci_out" | grep -qi "raid"; then
-    echo "RAID"
-    return
-  fi
-  
-  if echo "$lspci_out" | grep -qi "bolt"; then
-    echo "Thunderbolt"
-	return
-  fi
-  
-  if echo "$lspci_out" | grep -qi "usb"; then
-    if echo "$lspci_out" | grep -qiE "xhci|extensible "; then
-      echo "USB 3.x"
-    elif echo "$lspci_out" | grep -qiE "ehci|enhanced|[[:space:]]2\.0[[:space:]]"; then
-      echo "USB 2.0"
-    elif echo "$lspci_out" | grep -qiE "uhci|ohci|universal|open|[[:space:]]1\.1[[:space:]]|[[:space:]]1\.0[[:space:]]"; then
-      echo "USB 1.x"
-    else
-      echo "USB"
-    fi
-    return
-  fi
-  
-  if echo "$lspci_out" | grep -qiE 'firewire|ieee'; then
-    echo "IEEE 1394"
-    return
-  fi
-  
-  if echo "$lspci_out" | grep -qi "sas"; then
-    echo "SAS"
-    return
-  fi
-
-  if echo "$lspci_out" | grep -qi "scsi"; then
-    echo "SCSI"
-    return
-  fi
-  
-  if echo "$lspci_out" | grep -qiE 'pcmcia|cardbus'; then
-    echo "PCMCIA"
-    return
-  fi
-
-  echo "Unknown"
-}
-
-scan_disks
+source "./scripts/diskinfo.sh"
+source "./scripts/partinfo.sh"
 
 while true; do
-  # === Disk selection ===
-  DISK_SELECTED=$(dialog --clear --backtitle "Reinstall Grub4dos MBR" \
-    --title "Select Disk" \
-    --menu "Choose the disk for reinstalling Grub4dos MBR:" 18 70 10 "${DISK_MENU[@]}" 3>&1 1>&2 2>&3)
-  
-  [[ $? -ne 0 || -z "$DISK_SELECTED" ]] && break
+  DISK_MENU=()
+  scan_disks "$INSTLR_DEVICE"
 
-  # === Confirmation before MBR update ===
-  dialog --yesno "WARNING!\n\nYou are about to reinstall the Grub4dos MBR on $DISK_SELECTED.\nThis may overwrite the existing MBR.\n\nDo you want to continue?" 12 60
-  if [[ $? -ne 0 ]]; then
+  DISK_SELECTED=$(dialog --clear --backtitle "MBR Boot Record Manager" \
+    --title "Select Target Disk" \
+    --menu "Choose the target MBR disk to rewrite the Master Boot Record:" 19 80 13 "${DISK_MENU[@]}" 3>&1 1>&2 2>&3)
+  
+  [[ $? -ne 0 || -z "$DISK_SELECTED" ]] && exit 2
+  
+  IS_MBR="${DISK_INFO["$DISK_SELECTED,type"]}"
+
+  if [[ "$IS_MBR" != "MBR" && "$IS_MBR" != "MSDOS" ]]; then
+    dialog --msgbox "Error: The selected disk format is ${IS_MBR:-UNKNOWN}!\n\nPBR Boot Record Repair Tool can only be performed on MBR partition tables." 8 70
     continue
   fi
 
-  # === Update MBR ===
-  if [[ -f /tmp/files/bootldr/bootlace.com ]]; then
-    chmod 777 /tmp/files/bootldr/bootlace.com
-    if sudo /tmp/files/bootldr/bootlace.com "$DISK_SELECTED" >/dev/null 2>&1; then
-      dialog --msgbox "MBR successfully updated on $DISK_SELECTED." 7 50
-    else
-      dialog --msgbox "Error: Failed to update MBR on $DISK_SELECTED!" 7 50
-    fi
+  CURRENT_MBR_RAW=$(sudo ms-sys "$DISK_SELECTED" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+  CURRENT_MBR_DESC="Unknown / Custom Bootloader"
+
+  if echo "$CURRENT_MBR_RAW" | grep -q "grub4dos"; then
+    CURRENT_MBR_DESC="Grub4dos"
+  elif echo "$CURRENT_MBR_RAW" | grep -qE "microsoft 7|bootmgr"; then
+    CURRENT_MBR_DESC="Windows Vista/7/8/10/11 / Late Longhorn"
+  elif echo "$CURRENT_MBR_RAW" | grep -qE "2000/xp/2003|ntldr"; then
+    CURRENT_MBR_DESC="Windows NT/2000/XP / Early Longhorn"
+  elif echo "$CURRENT_MBR_RAW" | grep -qE "95b/98/98se/me"; then
+    CURRENT_MBR_DESC="Windows 95B/98/SE/ME"
+  elif echo "$CURRENT_MBR_RAW" | grep -qE "dos|95a|mbrdos"; then
+    CURRENT_MBR_DESC="DOS/NT/95A"
+  elif echo "$CURRENT_MBR_RAW" | grep -q "reactos"; then
+    CURRENT_MBR_DESC="ReactOS / FreeLdr"
+  elif echo "$CURRENT_MBR_RAW" | grep -q "zeroed"; then
+    CURRENT_MBR_DESC="Zeroed/Empty MBR Structure"
   else
-    dialog --msgbox "Error: bootlace.com not found!" 7 50
+    MBR_STRINGS=$(sudo dd if="$DISK_SELECTED" bs=512 count=16 2>/dev/null | strings)
+
+    if echo "$MBR_STRINGS" | grep -qiE "grub4dos|grldr"; then
+      CURRENT_MBR_DESC="Grub4dos"
+    fi
   fi
 
-  continue
+  while true; do
+    MBR_TYPE_ACTION=$(dialog --clear --backtitle "MBR Boot Record Manager" \
+      --title "$DISK_SELECTED | Current MBR: $CURRENT_MBR_DESC" \
+      --menu "Select Master Boot Record payload to deploy on $DISK_SELECTED:" 14 77 7 \
+      "1" "Windows Vista/7/8/10/11 / Late Longhorn MBR" \
+      "2" "Windows NT/2000/XP / Early Longhorn MBR" \
+      "3" "ReactOS / FreeLdr MBR" \
+      "4" "Grub4dos MBR" \
+      "5" "Windows 95B/98/SE/ME MBR" \
+      "6" "DOS/NT/95A MBR" \
+      "7" "Zero Out MBR Boot Code (Empty/Clear Executable Block)" \
+      3>&1 1>&2 2>&3)
+
+    [[ $? -ne 0 || -z "$MBR_TYPE_ACTION" ]] && break
+
+    MBR_ID=""
+    SELECTED_MBR_LABEL=""
+
+    # Map menu options directly to clean string IDs for startinst.sh compatibility
+    case "$MBR_TYPE_ACTION" in
+      1) MBR_ID="BOOTMGR";  SELECTED_MBR_LABEL="Windows Vista/7/8/10/11 / Late Longhorn MBR" ;;
+      2) MBR_ID="NTLDR";    SELECTED_MBR_LABEL="Windows NT/2000/XP / Early Longhorn MBR" ;;
+      3) MBR_ID="REACTOS";  SELECTED_MBR_LABEL="ReactOS / FreeLdr MBR" ;; 
+      4) MBR_ID="GRUB4DOS"; SELECTED_MBR_LABEL="Grub4dos MBR" ;;
+      5) MBR_ID="WIN9X";    SELECTED_MBR_LABEL="Windows 95B/98/SE/ME MBR" ;;
+      6) MBR_ID="DOS";      SELECTED_MBR_LABEL="DOS/NT/95A MBR" ;;
+      7) MBR_ID="ZERO";     SELECTED_MBR_LABEL="Zeroed/Empty MBR Code" ;;
+      *) continue ;;
+    esac
+
+    dialog --yesno "Are you sure you want to alter the MBR on $DISK_SELECTED?\n\nCurrent Layout: $CURRENT_MBR_DESC\nTarget Layout: $SELECTED_MBR_LABEL\n\nExisting partitions and data will be preserved. Do you want to continue?" 13 75
+    [[ $? -ne 0 ]] && continue
+
+    dialog --infobox "Deploying Master Boot Record table sector payload..." 3 50
+    
+    # Import and execute applymbr.sh logic with human-readable string ID
+    ./scripts/applymbr.sh "$DISK_SELECTED" "$MBR_ID"
+    status=$?
+
+    if [[ $status -eq 0 ]]; then
+      dialog --msgbox "Success: MBR updated to $SELECTED_MBR_LABEL successfully." 7 60
+    else
+      dialog --msgbox "Error: System utility ms-sys failed to write master boot records even with force flag override applied!" 7 85
+    fi
+
+    break
+  done
 done
